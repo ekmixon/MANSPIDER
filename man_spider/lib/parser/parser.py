@@ -129,7 +129,7 @@ class FileParser:
 
         log.debug(f'Parsing file: {pretty_filename}')
 
-        matches = dict()
+        matches = {}
 
         try:
 
@@ -141,7 +141,7 @@ class FileParser:
                 log.warning(f'Error extracting text from {pretty_filename}: {e}')
             else:
                 log.warning(f'Error extracting text from {pretty_filename} (-v to debug)')
-            
+
         return matches
 
 
@@ -151,7 +151,7 @@ class FileParser:
         Uses the textract library on specific extensions
         '''
 
-        matches = dict()
+        matches = {}
 
         suffix = Path(str(file)).suffix.lower()
 
@@ -174,7 +174,7 @@ class FileParser:
             binary_content = text_content.encode('utf-8')
         except Exception:
             pass
-            
+
         # count the matches
         for _filter, match in self.match(text_content):
             try:

@@ -22,7 +22,11 @@ def go(options):
     try:
 
         # warn if --or-logic is enabled
-        if options.or_logic and options.content and not all([type(t) == pathlib.PosixPath for t in options.targets]):
+        if (
+            options.or_logic
+            and options.content
+            and any(type(t) != pathlib.PosixPath for t in options.targets)
+        ):
             log.warning('WARNING: "--or-logic" causes files to be content-searched even if filename/extension filters do not match!!')
             sleep(2)
 
@@ -86,7 +90,15 @@ def main():
     parser.add_argument('-m', '--maxdepth',     type=int,   default=10,     help='maximum depth to spider (default: 10)')
     parser.add_argument('-H', '--hash',         default='',                 help='NTLM hash for authentication')
     parser.add_argument('-t', '--threads',      type=int,   default=5,      help='concurrent threads (default: 5)')
-    parser.add_argument('-f', '--filenames', nargs='+', default=[],         help=f'filter filenames using regex (space-separated)', metavar='REGEX')
+    parser.add_argument(
+        '-f',
+        '--filenames',
+        nargs='+',
+        default=[],
+        help='filter filenames using regex (space-separated)',
+        metavar='REGEX',
+    )
+
     parser.add_argument('-e', '--extensions',nargs='+', default=[],         help='only show filenames with these extensions (space-separated, e.g. `docx xlsx` for only word & excel docs)', metavar='EXT')
     parser.add_argument('--exclude-extensions',nargs='+', default=[],       help='ignore files with these extensions', metavar='EXT')
     parser.add_argument('-c', '--content',   nargs='+', default=[],         help='search for file content using regex (multiple supported)', metavar='REGEX')
@@ -97,7 +109,13 @@ def main():
     parser.add_argument('-q', '--quiet',   action='store_true',             help='don\'t display matching file content')
     parser.add_argument('-n', '--no-download',   action='store_true',       help='don\'t download matching files')
     parser.add_argument('-mfail', '--max-failed-logons', type=int,          help='limit failed logons', metavar='INT')
-    parser.add_argument('-o', '--or-logic', action='store_true',            help=f'use OR logic instead of AND (files are downloaded if filename OR extension OR content match)')
+    parser.add_argument(
+        '-o',
+        '--or-logic',
+        action='store_true',
+        help='use OR logic instead of AND (files are downloaded if filename OR extension OR content match)',
+    )
+
     parser.add_argument('-s', '--max-filesize', type=human_to_int, default=human_to_int('10M'), help=f'don\'t retrieve files over this size, e.g. "500K" or ".5M" (default: 10M)', metavar='SIZE')
     parser.add_argument('-v', '--verbose', action='store_true',             help='show debugging messages')
 

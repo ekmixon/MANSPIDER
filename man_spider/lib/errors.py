@@ -49,7 +49,7 @@ def impacket_error(e):
         try:
             error_str = e.getErrorString()[0]
             e.args = (error_str,)
-        except (IndexError,):
+        except IndexError:
             pass
     if not e.args:
         e.args = ('',)
@@ -69,7 +69,7 @@ def handle_impacket_error(e, smb_client, share='', filename='', display=False):
     elif type(e) in (NetBIOSError, NetBIOSTimeout, BrokenPipeError, SessionError, CSessionError):
         # the connection may need to be rebuilt
         if type(e) in (SessionError, CSessionError):
-            if any([x in str(e) for x in ('PASSWORD_EXPIRED',)]):
+            if any(x in str(e) for x in ('PASSWORD_EXPIRED',)):
                 smb_client.rebuild(e)
         else:
             smb_client.rebuild(e)

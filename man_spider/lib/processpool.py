@@ -20,7 +20,7 @@ class ProcessPool:
 
     def __init__(self, processes=None, daemon=False, name=''):
 
-        self.name = f'ProcessPool'
+        self.name = 'ProcessPool'
         if name:
             self.name += f'-{name}'
 
@@ -48,24 +48,20 @@ class ProcessPool:
 
                 while 1:
 
-                    for result in self.results:
-                        yield result
-
+                    yield from self.results
                     # start processes
                     for i in range(len(self.pool)):
                         process = self.pool[i]
                         if process is None or not process.is_alive():
                             self.pool[i] = mp.Process(target=self.execute, args=(func, self.result_queue, (entry,)+args), \
-                                kwargs=kwargs, daemon=self.daemon)
+                                    kwargs=kwargs, daemon=self.daemon)
                             self.pool[i].start()
                             self.started_counter += 1
                             log.debug(f'{self.name}: {self.started_counter:,} processes started')
                             # success, move on to next
                             assert False
 
-                        for result in self.results:
-                            yield result
-
+                        yield from self.results
                     # prevent unnecessary CPU usage
                     sleep(.1)
 
@@ -83,8 +79,7 @@ class ProcessPool:
                 log.debug(f'{self.name}: Waiting for {finished_threads.count(False):,} threads to finish')
                 sleep(1)
 
-        for result in self.results:
-            yield result
+        yield from self.results
 
 
     @property

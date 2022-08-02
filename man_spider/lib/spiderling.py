@@ -211,80 +211,84 @@ class Spiderling:
         Only yield files which conform to all filters (except content)
         '''
 
-        if depth < self.parent.maxdepth and self.dir_match(path):
-
-            files = []
-            while tries > 0:
-                try:
-                    files = list(self.smb_client.ls(share, path))
+        if depth >= self.parent.maxdepth or not self.dir_match(path):
+            return
+        files = []
+        while tries > 0:
+            try:
+                files = list(self.smb_client.ls(share, path))
+                break
+            except FileListError as e:
+                if 'ACCESS_DENIED' in str(e):
+                    log.debug(f'{self.target}: Error listing files: {e}')
                     break
-                except FileListError as e:
-                    if 'ACCESS_DENIED' in str(e):
-                        log.debug(f'{self.target}: Error listing files: {e}')
-                        break
-                    else:
-                        tries -= 1
-
-            if files:
-                log.debug(f'{self.target}: {share}{path}: contains {len(files):,} items')
-
-            for f in files:
-                name = f.get_longname()
-                full_path = f'{path}\\{name}'
-                # if it's a directory, go deeper
-                if f.is_directory():
-                    for file in self.list_files(share, full_path, (depth+1)):
-                        yield file
-
                 else:
+                    tries -= 1
 
-                    # skip the file if it didn't match extension filters
-                    if self.extension_blacklisted(name):
-                        log.debug(f'{self.target}: Skipping {share}{full_path}: extension is blacklisted')
-                        continue
+        if files:
+            log.debug(f'{self.target}: {share}{path}: contains {len(files):,} items')
 
-                    if not self.path_match(name):
-                        if not (
-                                # all of these have to be true in order to get past this point
-                                # "or logic" is enabled
-                                self.parent.or_logic and
-                                # and file does not have a "don't parse" extension
-                                (not self.is_binary_file(name)) and
-                                # and content filters are enabled
-                                self.parent.parser.content_filters
-                            ):
-                            log.debug(f'{self.target}: Skipping {share}{full_path}: filename/extensions do not match')
-                            continue
+        for f in files:
+            name = f.get_longname()
+            full_path = f'{path}\\{name}'
+                # if it's a directory, go deeper
+            if f.is_directory():
+                yield from self.list_files(share, full_path, (depth+1))
+            else:
 
-                    # try to get the size of the file
-                    try:
-                        filesize = f.get_filesize()
-                    except Exception as e:
-                        handle_impacket_error(e)
-                        continue
+                # skip the file if it didn't match extension filters
+                if self.extension_blacklisted(name):
+                    log.debug(f'{self.target}: Skipping {share}{full_path}: extension is blacklisted')
+                    continue
 
-                    # make the RemoteFile object (the file won't be read yet)
-                    full_path_fixed = full_path.lstrip('\\')
-                    remote_file = RemoteFile(full_path_fixed, share, self.target, size=filesize)
+                if not self.path_match(name) and not (
+                    # all of these have to be true in order to get past this point
+                    # "or logic" is enabled
+                    self.parent.or_logic
+                    and
+                    # and file does not have a "don't parse" extension
+                    (not self.is_binary_file(name))
+                    and
+                    # and content filters are enabled
+                    self.parent.parser.content_filters
+                ):
+                    log.debug(f'{self.target}: Skipping {share}{full_path}: filename/extensions do not match')
+                    continue
+
+                # try to get the size of the file
+                try:
+                    filesize = f.get_filesize()
+                except Exception as e:
+                    handle_impacket_error(e)
+                    continue
+
+                # make the RemoteFile object (the file won't be read yet)
+                full_path_fixed = full_path.lstrip('\\')
+                remote_file = RemoteFile(full_path_fixed, share, self.target, size=filesize)
 
                     # if it's a non-empty file that's smaller than the size limit
-                    if filesize > 0 and filesize < self.parent.max_filesize:
-                        
+                if filesize > 0 and filesize < self.parent.max_filesize:
+                    
                         # if it matched filename/extension filters and we're downloading files
-                        if (self.parent.file_extensions or self.parent.filename_filters) and not self.parent.no_download:
-                            # but the extension is marked as "don't parse"
-                            if self.is_binary_file(name):
-                                # don't parse it, instead save it and continue
-                                log.info(f'{self.target}: {remote_file.share}\\{remote_file.name}')
-                                if self.get_file(remote_file):
-                                    self.save_file(remote_file)
-                                    continue
+                    if (
+                        (
+                            self.parent.file_extensions
+                            or self.parent.filename_filters
+                        )
+                        and not self.parent.no_download
+                        and self.is_binary_file(name)
+                    ):
+                        # don't parse it, instead save it and continue
+                        log.info(f'{self.target}: {remote_file.share}\\{remote_file.name}')
+                        if self.get_file(remote_file):
+                            self.save_file(remote_file)
+                            continue
 
-                        # file is ready to be parsed
-                        yield remote_file
+                    # file is ready to be parsed
+                    yield remote_file
 
-                    else:
-                        log.debug(f'{self.target}: {full_path} is either empty or too large')
+                else:
+                    log.debug(f'{self.target}: {full_path} is either empty or too large')
 
 
     def path_match(self, file):
@@ -332,9 +336,13 @@ class Spiderling:
             return True
 
         # if whitelist check passes
-        if (not self.parent.dir_whitelist) or any([k.lower() in dirname for k in self.parent.dir_whitelist]):
+        if not self.parent.dir_whitelist or any(
+            k.lower() in dirname for k in self.parent.dir_whitelist
+        ):
             # and blacklist check passes
-            if (not self.parent.dir_blacklist) or not any([k.lower() in dirname for k in self.parent.dir_blacklist]):
+            if not self.parent.dir_blacklist or all(
+                k.lower() not in dirname for k in self.parent.dir_blacklist
+            ):
                 return True
             else:
                 log.debug(f'{self.target}: Skipping blacklisted dir: {path}')
@@ -349,7 +357,10 @@ class Spiderling:
         Return true if "filename" matches any of the filename filters
         '''
 
-        if (not self.parent.filename_filters) or any([f_regex.match(str(pathlib.Path(filename).stem)) for f_regex in self.parent.filename_filters]):
+        if not self.parent.filename_filters or any(
+            f_regex.match(str(pathlib.Path(filename).stem))
+            for f_regex in self.parent.filename_filters
+        ):
             return True
         else:
             log.debug(f'{self.target}: {filename} does not match filename filters')
@@ -363,10 +374,12 @@ class Spiderling:
         '''
 
         extension = ''.join(pathlib.Path(filename).suffixes).lower()
-        if any([extension.endswith(e.lower()) for e in self.dont_parse]):
-            if extension not in self.parent.file_extensions:
-                log.debug(f'{self.target}: Not parsing {filename} due to undesirable extension')
-                return True
+        if (
+            any(extension.endswith(e.lower()) for e in self.dont_parse)
+            and extension not in self.parent.file_extensions
+        ):
+            log.debug(f'{self.target}: Not parsing {filename} due to undesirable extension')
+            return True
         return False
 
 
@@ -380,11 +393,10 @@ class Spiderling:
         if not excluded_extensions:
             return False
 
-        if not any([extension.endswith(e) for e in excluded_extensions]):
+        if not any(extension.endswith(e) for e in excluded_extensions):
             return False
-        else:
-            log.debug(f'{self.target}: Skipping file with blacklisted extension: {filename}')
-            return True
+        log.debug(f'{self.target}: Skipping file with blacklisted extension: {filename}')
+        return True
 
 
     def extension_whitelisted(self, filename):
@@ -399,7 +411,7 @@ class Spiderling:
             return True
 
         # if whitelist check passes
-        if  any([extension.endswith(e) for e in extensions]):
+        if any(extension.endswith(e) for e in extensions):
             log.debug(f'{self.target}: {filename} matches extension filters')
             return True
         else:
@@ -420,7 +432,7 @@ class Spiderling:
     def parse_local_files(self, files):
 
         with ProcessPool(self.parent.threads) as pool:
-            for r in pool.map(self.parse_file, files):
+            for _ in pool.map(self.parse_file, files):
                 pass
 
 

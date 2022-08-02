@@ -56,7 +56,7 @@ class MANSPIDER:
 
         # prevents needing to continually instantiate new SMBClients
         # {target: SMBClient() ...}
-        self.smb_client_cache = dict()
+        self.smb_client_cache = {}
 
         # directory to store documents when searching contents
         self.tmp_dir = Path('/tmp/.manspider')
@@ -128,9 +128,9 @@ class MANSPIDER:
         for f in filename_filters:
             regex_str = str(f)
             try:
-                if not any([f.startswith(x) for x in ['^', '.*']]):
+                if not any(f.startswith(x) for x in ['^', '.*']):
                     regex_str = rf'.*{regex_str}'
-                if not any([f.endswith(x) for x in ['$', '.*']]):
+                if not any(f.endswith(x) for x in ['$', '.*']):
                     regex_str = rf'{regex_str}.*'
                 self.filename_filters.append(re.compile(regex_str, re.I))
             except re.error as e:
@@ -179,10 +179,11 @@ class MANSPIDER:
         Return True if we've reached max failed logons
         '''
 
-        if self.max_failed_logons is not None:
-            if self.failed_logons >= self.max_failed_logons and self.domain:
-                return True
-        return False
+        return bool(
+            self.max_failed_logons is not None
+            and self.failed_logons >= self.max_failed_logons
+            and self.domain
+        )
 
 
     def get_smb_client(self, target):

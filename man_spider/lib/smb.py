@@ -24,10 +24,7 @@ class SMBClient:
         self.password = password
         self.domain = domain
         self.nthash = nthash
-        if self.nthash:
-            self.lmhash = 'aad3b435b51404eeaad3b435b51404ee'
-        else:
-            self.lmhash = ''
+        self.lmhash = 'aad3b435b51404eeaad3b435b51404ee' if self.nthash else ''
 
 
     @property
@@ -54,70 +51,68 @@ class SMBClient:
         Return False if logon failed
         '''
 
-        if self.conn is None or refresh:
-            try:
-                self.conn = SMBConnection(self.server, self.server, sess_port=445, timeout=20)
-            except Exception as e:
-                log.debug(impacket_error(e))
-                return None
+        if self.conn is not None and not refresh:
+            return True
+        try:
+            self.conn = SMBConnection(self.server, self.server, sess_port=445, timeout=20)
+        except Exception as e:
+            log.debug(impacket_error(e))
+            return None
 
-            try:
+        try:
 
-                if self.username in [None, '', 'Guest'] and first_try:
-                    # skip to guest / null session
-                    assert False
+            if self.username in [None, '', 'Guest'] and first_try:
+                # skip to guest / null session
+                assert False
 
-                log.debug(f'{self.server}: Authenticating as "{self.domain}\\{self.username}"')
+            log.debug(f'{self.server}: Authenticating as "{self.domain}\\{self.username}"')
 
-                # pass the hash if requested
-                if self.nthash and not self.password:
-                    self.conn.login(
-                        self.username,
-                        '',
-                        lmhash=self.lmhash,
-                        nthash=self.nthash,
-                        domain=self.domain,
-                    )
-                # otherwise, normal login
-                else:
-                    self.conn.login(
-                        self.username,
-                        self.password,
-                        domain=self.domain,
-                    )
+            # pass the hash if requested
+            if self.nthash and not self.password:
+                self.conn.login(
+                    self.username,
+                    '',
+                    lmhash=self.lmhash,
+                    nthash=self.nthash,
+                    domain=self.domain,
+                )
+            # otherwise, normal login
+            else:
+                self.conn.login(
+                    self.username,
+                    self.password,
+                    domain=self.domain,
+                )
 
-                log.info(f'{self.server}: Successful login as "{self.username}"')
-                return True
+            log.info(f'{self.server}: Successful login as "{self.username}"')
+            return True
 
-            except Exception as e:
+        except Exception as e:
 
-                if type(e) != AssertionError:
-                    e = handle_impacket_error(e, self, display=True)
+            if type(e) != AssertionError:
+                e = handle_impacket_error(e, self, display=True)
 
                 # try guest account, then null session if logon failed
-                if first_try:
+            if first_try:
 
-                    bad_statuses = ['LOGON_FAIL', 'PASSWORD_EXPIRED', 'LOCKED_OUT', 'SESSION_DELETED']
-                    if any([s in str(e) for s in bad_statuses]):
-                        for s in bad_statuses:
-                            if s in str(e):
-                                log.warning(f'{self.server}: {s}: {self.username}')
+                bad_statuses = ['LOGON_FAIL', 'PASSWORD_EXPIRED', 'LOCKED_OUT', 'SESSION_DELETED']
+                if any(s in str(e) for s in bad_statuses):
+                    for s in bad_statuses:
+                        if s in str(e):
+                            log.warning(f'{self.server}: {s}: {self.username}')
 
-                    log.debug(f'{self.server}: Trying guest session')
-                    self.username = 'Guest'
-                    self.password = ''
-                    self.domain = ''
-                    self.nthash = ''
-                    guest_success = self.login(refresh=True, first_try=False)
-                    if not guest_success:
-                        log.debug(f'{self.server}: Switching to null session')
-                        self.username = ''
-                        self.login(refresh=True, first_try=False)
+                log.debug(f'{self.server}: Trying guest session')
+                self.username = 'Guest'
+                self.password = ''
+                self.domain = ''
+                self.nthash = ''
+                guest_success = self.login(refresh=True, first_try=False)
+                if not guest_success:
+                    log.debug(f'{self.server}: Switching to null session')
+                    self.username = ''
+                    self.login(refresh=True, first_try=False)
 
-            return False
-
-        else:
-            return True
+        return False
 
 
     def ls(self, share, path):

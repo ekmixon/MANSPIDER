@@ -15,7 +15,7 @@ def str_to_list(s):
     # try to open as file
     try:
         with open(s) as f:
-            lines = set([l.strip() for l in f.readlines()])
+            lines = {l.strip() for l in f.readlines()}
             for line in lines:
                 if line:
                     l.add(line)
@@ -64,8 +64,8 @@ def human_to_int(h):
 
     try:
         h = h.upper().strip()
-        i = float(''.join(c for c in h if c in string.digits + '.'))
-        unit = ''.join([c for c in h if c in units.keys()])
+        i = float(''.join(c for c in h if c in f'{string.digits}.'))
+        unit = ''.join([c for c in h if c in units])
     except (ValueError, KeyError):
         raise ValueError(f'Invalid filesize "{h}"')
 
@@ -79,19 +79,11 @@ def bytes_to_human(_bytes):
     '''
 
     sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB']
-    units = {}
-    count = 0
-    for size in sizes:
-        units[size] = pow(1024, count)
-        count +=1
-
+    units = {size: pow(1024, count) for count, size in enumerate(sizes)}
     for size in sizes:
         if abs(_bytes) < 1024.0:
-            if size == sizes[0]:
-                _bytes = str(int(_bytes))
-            else:
-                _bytes = '{:.2f}'.format(_bytes)
-            return '{}{}'.format(_bytes, size)
+            _bytes = str(int(_bytes)) if size == sizes[0] else '{:.2f}'.format(_bytes)
+            return f'{_bytes}{size}'
         _bytes /= 1024
 
     raise ValueError
@@ -111,7 +103,12 @@ def better_decode(b):
 
 def random_string(length):
 
-    return ''.join(random.choice(string.ascii_lowercase + string.ascii_uppercase + string.digits) for i in range(length))
+    return ''.join(
+        random.choice(
+            string.ascii_lowercase + string.ascii_uppercase + string.digits
+        )
+        for _ in range(length)
+    )
 
 
 def list_files(path):
